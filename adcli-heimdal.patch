@@ -1,0 +1,252 @@
+--- adcli-0.7.5/library/adconn.c.orig	2013-09-13 09:58:49.000000000 +0200
++++ adcli-0.7.5/library/adconn.c	2014-12-23 20:40:58.434276020 +0100
+@@ -28,7 +28,7 @@
+ #include "addisco.h"
+ 
+ #include <gssapi/gssapi_krb5.h>
+-#include <krb5/krb5.h>
++#include <krb5.h>
+ #include <ldap.h>
+ #include <sasl/sasl.h>
+ 
+@@ -494,10 +494,12 @@ _adcli_kinit_computer_creds (adcli_conn
+ 	code = krb5_get_init_creds_opt_alloc (k5, &opt);
+ 	return_val_if_fail (code == 0, code);
+ 
++#ifdef MIT_KRB
+ 	if (ccache) {
+ 		code = krb5_get_init_creds_opt_set_out_ccache (k5, opt, ccache);
+ 		return_val_if_fail (code == 0, code);
+ 	}
++#endif
+ 
+ 	memset (&dummy, 0, sizeof (dummy));
+ 	if (!creds)
+@@ -561,10 +563,12 @@ _adcli_kinit_user_creds (adcli_conn *con
+ 	code = krb5_get_init_creds_opt_alloc (k5, &opt);
+ 	return_val_if_fail (code == 0, code);
+ 
++#ifdef MIT_KRB
+ 	if (ccache) {
+ 		code = krb5_get_init_creds_opt_set_out_ccache (k5, opt, ccache);
+ 		return_val_if_fail (code == 0, code);
+ 	}
++#endif
+ 
+ 	memset (&dummy, 0, sizeof (dummy));
+ 	if (!creds)
+@@ -1420,7 +1424,7 @@ adcli_conn_set_login_ccache_name (adcli_
+ 
+ 	if (conn->login_ccache_name) {
+ 		if (conn->login_ccache_name_is_krb5)
+-			krb5_free_string (conn->k5, conn->login_ccache_name);
++			krb5_xfree (conn->login_ccache_name);
+ 		else
+ 			free (conn->login_ccache_name);
+ 	}
+--- adcli-0.7.5/library/adconn.h.orig	2013-08-07 10:07:41.000000000 +0200
++++ adcli-0.7.5/library/adconn.h	2014-12-22 22:50:24.107575979 +0100
+@@ -26,7 +26,7 @@
+ 
+ #include "adutil.h"
+ 
+-#include <krb5/krb5.h>
++#include <krb5.h>
+ #include <ldap.h>
+ 
+ typedef enum {
+--- adcli-0.7.5/library/adenroll.c.orig	2013-09-06 10:23:58.000000000 +0200
++++ adcli-0.7.5/library/adenroll.c	2014-12-23 20:49:32.970921047 +0100
+@@ -28,7 +28,7 @@
+ #include "seq.h"
+ 
+ #include <gssapi/gssapi_krb5.h>
+-#include <krb5/krb5.h>
++#include <krb5.h>
+ #include <ldap.h>
+ #include <sasl/sasl.h>
+ 
+@@ -852,7 +852,7 @@ set_password_with_user_creds (adcli_enro
+ 		            message ? ": " : "", message ? message : "");
+ 		res = ADCLI_ERR_CREDENTIALS;
+ #ifdef HAVE_KRB5_CHPW_MESSAGE
+-		krb5_free_string (k5, message);
++		krb5_xfree (message);
+ #else
+ 		free (message);
+ #endif
+@@ -916,7 +916,7 @@ set_password_with_computer_creds (adcli_
+ 		            message ? ": " : "", message ? message : "");
+ 		res = ADCLI_ERR_CREDENTIALS;
+ #ifdef HAVE_KRB5_CHPW_MESSAGE
+-		krb5_free_string (k5, message);
++		krb5_xfree (message);
+ #else
+ 		free (message);
+ #endif
+@@ -1242,10 +1242,10 @@ ensure_host_keytab (adcli_result res,
+ 			return ADCLI_ERR_FAIL;
+ 		}
+ 
+-		name = malloc (MAX_KEYTAB_NAME_LEN + 1);
++		name = malloc (1100 + 1);
+ 		return_unexpected_if_fail (name != NULL);
+ 
+-		code = krb5_kt_get_name (k5, enroll->keytab, name, MAX_KEYTAB_NAME_LEN + 1);
++		code = krb5_kt_get_name (k5, enroll->keytab, name, 1100 + 1);
+ 		return_unexpected_if_fail (code == 0);
+ 
+ 		enroll->keytab_name = name;
+@@ -1297,6 +1297,7 @@ build_principal_salts (adcli_enroll *enr
+ {
+ 	krb5_error_code code;
+ 	krb5_data *salts;
++	krb5_salt salt;
+ 	const int count = 3;
+ 	int i = 0;
+ 
+@@ -1304,8 +1305,9 @@ build_principal_salts (adcli_enroll *enr
+ 	return_val_if_fail (salts != NULL, NULL);
+ 
+ 	/* Build up the salts, first a standard kerberos salt */
+-	code = krb5_principal2salt (k5, principal, &salts[i++]);
++	code = krb5_get_pw_salt (k5, principal, &salt);
+ 	return_val_if_fail (code == 0, NULL);
++	salts[i++] = salt.saltvalue;
+ 
+ 	/* Then a Windows 2003 computer account salt */
+ 	code = _adcli_krb5_w2k3_salt (k5, principal, enroll->computer_name, &salts[i++]);
+@@ -1941,7 +1943,7 @@ adcli_enroll_set_keytab_name (adcli_enro
+ 		if (enroll->keytab_name_is_krb5) {
+ 			k5 = adcli_conn_get_krb5_context (enroll->conn);
+ 			return_if_fail (k5 != NULL);
+-			krb5_free_string (k5, enroll->keytab_name);
++			krb5_xfree (enroll->keytab_name);
+ 		} else {
+ 			free (enroll->keytab_name);
+ 		}
+--- adcli-0.7.5/library/adkrb5.c.orig	2013-04-17 22:57:03.000000000 +0200
++++ adcli-0.7.5/library/adkrb5.c	2014-12-23 19:50:58.044401806 +0100
+@@ -27,7 +27,7 @@
+ #include "adprivate.h"
+ 
+ #include <gssapi/gssapi_krb5.h>
+-#include <krb5/krb5.h>
++#include <krb5.h>
+ 
+ #include <assert.h>
+ #include <ctype.h>
+@@ -78,7 +78,7 @@ _adcli_krb5_keytab_clear (krb5_context k
+ 
+ 		/* See if we should remove this entry */
+ 		if (!match_func (k5, &entry, match_data)) {
+-			krb5_free_keytab_entry_contents (k5, &entry);
++			krb5_kt_free_entry (k5, &entry);
+ 			continue;
+ 		}
+ 
+@@ -91,7 +91,7 @@ _adcli_krb5_keytab_clear (krb5_context k
+ 		return_val_if_fail (code == 0, code);
+ 
+ 		code = krb5_kt_remove_entry (k5, keytab, &entry);
+-		krb5_free_keytab_entry_contents (k5, &entry);
++		krb5_kt_free_entry (k5, &entry);
+ 
+ 		if (code != 0)
+ 			return code;
+@@ -138,9 +138,10 @@ _adcli_krb5_keytab_add_entries (krb5_con
+ 	int i;
+ 
+ 	for (i = 0; enctypes[i] != 0; i++) {
++		krb5_salt k5salt = { KRB5_PADATA_PW_SALT, *salt };
+ 		memset (&entry, 0, sizeof(entry));
+ 
+-		code = krb5_c_string_to_key (k5, enctypes[i], password, salt, &entry.key);
++		code = krb5_string_to_key_data_salt (k5, enctypes[i], *password, k5salt, &entry.keyblock);
+ 		if (code != 0)
+ 			return code;
+ 
+@@ -150,7 +151,7 @@ _adcli_krb5_keytab_add_entries (krb5_con
+ 		code = krb5_kt_add_entry (k5, keytab, &entry);
+ 
+ 		entry.principal = NULL;
+-		krb5_free_keytab_entry_contents (k5, &entry);
++		krb5_kt_free_entry (k5, &entry);
+ 
+ 		if (code != 0)
+ 			return code;
+@@ -225,11 +226,12 @@ _adcli_krb5_w2k3_salt (krb5_context k5,
+                        const char *host_netbios,
+                        krb5_data *salt)
+ {
+-	krb5_data *realm;
++	krb5_realm *realm;
+ 	size_t size = 0;
+ 	size_t host_length = 0;
+ 	size_t at = 0;
+ 	int i;
++	char *salt_data;
+ 
+ 	/*
+ 	 * The format for the w2k3 computer account salt is:
+@@ -239,37 +241,37 @@ _adcli_krb5_w2k3_salt (krb5_context k5,
+ 	realm = krb5_princ_realm (k5, principal);
+ 	host_length = strlen (host_netbios);
+ 
+-	size += realm->length;
++	size += krb5_realm_length(*realm);
+ 	size += 4; /* "host" */
+ 	size += host_length;
+ 	size += 1; /* "." */
+-	size += realm->length;
++	size += krb5_realm_length(*realm);
+ 
+-	salt->data = malloc (size);
++	salt_data = salt->data = malloc (size);
+ 	return_val_if_fail (salt->data != NULL, ENOMEM);
+ 
+ 	/* Upper case realm */
+-	for (i = 0; i < realm->length; i++)
+-		salt->data[at + i] = toupper (realm->data[i]);
+-	at += realm->length;
++	for (i = 0; i < krb5_realm_length(*realm); i++)
++		salt_data[at + i] = toupper (krb5_realm_data(*realm)[i]);
++	at += krb5_realm_length(*realm);
+ 
+ 	/* The string "host" */
+-	memcpy (salt->data + at, "host", 4);
++	memcpy (salt_data + at, "host", 4);
+ 	at += 4;
+ 
+ 	/* The netbios name in lower case */
+ 	for (i = 0; i < host_length; i++)
+-		salt->data[at + i] = tolower (host_netbios[i]);
++		salt_data[at + i] = tolower (host_netbios[i]);
+ 	at += host_length;
+ 
+ 	/* The dot */
+-	memcpy (salt->data + at, ".", 1);
++	memcpy (salt_data + at, ".", 1);
+ 	at += 1;
+ 
+ 	/* Lower case realm */
+-	for (i = 0; i < realm->length; i++)
+-		salt->data[at + i] = tolower (realm->data[i]);
+-	at += realm->length;
++	for (i = 0; i < krb5_realm_length(*realm); i++)
++		salt_data[at + i] = tolower (krb5_realm_data(*realm)[i]);
++	at += krb5_realm_length(*realm);
+ 
+ 	assert (at == size);
+ 	salt->length = size;
+--- adcli-0.7.5/library/adldap.c.orig	2013-05-02 12:40:10.000000000 +0200
++++ adcli-0.7.5/library/adldap.c	2014-12-23 14:59:45.321801852 +0100
+@@ -27,7 +27,7 @@
+ #include "adprivate.h"
+ 
+ #include <gssapi/gssapi_krb5.h>
+-#include <krb5/krb5.h>
++#include <krb5.h>
+ #include <ldap.h>
+ #include <sasl/sasl.h>
+ 
