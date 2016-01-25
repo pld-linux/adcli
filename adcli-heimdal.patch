@@ -1,5 +1,5 @@
---- adcli-0.7.5/library/adconn.c.orig	2013-09-13 09:58:49.000000000 +0200
-+++ adcli-0.7.5/library/adconn.c	2014-12-23 20:40:58.434276020 +0100
+--- adcli-0.8.1/library/adconn.c.orig	2015-12-16 10:33:30.000000000 +0100
++++ adcli-0.8.1/library/adconn.c	2016-01-25 18:35:35.837816534 +0100
 @@ -28,7 +28,7 @@
  #include "addisco.h"
  
@@ -9,7 +9,7 @@
  #include <ldap.h>
  #include <sasl/sasl.h>
  
-@@ -494,10 +494,12 @@ _adcli_kinit_computer_creds (adcli_conn
+@@ -480,10 +480,12 @@ _adcli_kinit_computer_creds (adcli_conn
  	code = krb5_get_init_creds_opt_alloc (k5, &opt);
  	return_val_if_fail (code == 0, code);
  
@@ -22,7 +22,7 @@
  
  	memset (&dummy, 0, sizeof (dummy));
  	if (!creds)
-@@ -561,10 +563,12 @@ _adcli_kinit_user_creds (adcli_conn *con
+@@ -553,10 +555,12 @@ _adcli_kinit_user_creds (adcli_conn *con
  	code = krb5_get_init_creds_opt_alloc (k5, &opt);
  	return_val_if_fail (code == 0, code);
  
@@ -35,7 +35,19 @@
  
  	memset (&dummy, 0, sizeof (dummy));
  	if (!creds)
-@@ -1420,7 +1424,7 @@ adcli_conn_set_login_ccache_name (adcli_
+@@ -688,9 +692,9 @@ prep_kerberos_and_kinit (adcli_conn *con
+ 
+ 			if (strcmp (conn->login_keytab_name, "") == 0) {
+ 				free (conn->login_keytab_name);
+-				conn->login_keytab_name = malloc (MAX_KEYTAB_NAME_LEN);
++				conn->login_keytab_name = malloc (1100);
+ 				code = krb5_kt_get_name (conn->k5, conn->keytab,
+-				                         conn->login_keytab_name, MAX_KEYTAB_NAME_LEN);
++				                         conn->login_keytab_name, 1100);
+ 				conn->login_keytab_name_is_krb5 = 1;
+ 				return_unexpected_if_fail (code == 0);
+ 			}
+@@ -1438,7 +1442,7 @@ adcli_conn_set_login_ccache_name (adcli_
  
  	if (conn->login_ccache_name) {
  		if (conn->login_ccache_name_is_krb5)
@@ -43,6 +55,15 @@
 +			krb5_xfree (conn->login_ccache_name);
  		else
  			free (conn->login_ccache_name);
+ 	}
+@@ -1474,7 +1478,7 @@ adcli_conn_set_login_keytab_name (adcli_
+ 
+ 	if (conn->login_keytab_name) {
+ 		if (conn->login_keytab_name_is_krb5)
+-			krb5_free_string (conn->k5, conn->login_keytab_name);
++			krb5_xfree (conn->login_keytab_name);
+ 		else
+ 			free (conn->login_keytab_name);
  	}
 --- adcli-0.7.5/library/adconn.h.orig	2013-08-07 10:07:41.000000000 +0200
 +++ adcli-0.7.5/library/adconn.h	2014-12-22 22:50:24.107575979 +0100
@@ -55,8 +76,8 @@
  #include <ldap.h>
  
  typedef enum {
---- adcli-0.7.5/library/adenroll.c.orig	2013-09-06 10:23:58.000000000 +0200
-+++ adcli-0.7.5/library/adenroll.c	2014-12-23 20:49:32.970921047 +0100
+--- adcli-0.8.1/library/adenroll.c.orig	2015-12-11 11:37:01.000000000 +0100
++++ adcli-0.8.1/library/adenroll.c	2016-01-25 17:48:42.724601210 +0100
 @@ -28,7 +28,7 @@
  #include "seq.h"
  
@@ -66,7 +87,7 @@
  #include <ldap.h>
  #include <sasl/sasl.h>
  
-@@ -852,7 +852,7 @@ set_password_with_user_creds (adcli_enro
+@@ -855,7 +855,7 @@ set_password_with_user_creds (adcli_enro
  		            message ? ": " : "", message ? message : "");
  		res = ADCLI_ERR_CREDENTIALS;
  #ifdef HAVE_KRB5_CHPW_MESSAGE
@@ -75,7 +96,7 @@
  #else
  		free (message);
  #endif
-@@ -916,7 +916,7 @@ set_password_with_computer_creds (adcli_
+@@ -919,7 +919,7 @@ set_password_with_computer_creds (adcli_
  		            message ? ": " : "", message ? message : "");
  		res = ADCLI_ERR_CREDENTIALS;
  #ifdef HAVE_KRB5_CHPW_MESSAGE
@@ -84,10 +105,10 @@
  #else
  		free (message);
  #endif
-@@ -1242,10 +1242,10 @@ ensure_host_keytab (adcli_result res,
- 			return ADCLI_ERR_FAIL;
- 		}
+@@ -1245,10 +1245,10 @@ ensure_host_keytab (adcli_result res,
+ 		return res;
  
+ 	if (!enroll->keytab_name) {
 -		name = malloc (MAX_KEYTAB_NAME_LEN + 1);
 +		name = malloc (1100 + 1);
  		return_unexpected_if_fail (name != NULL);
@@ -97,7 +118,32 @@
  		return_unexpected_if_fail (code == 0);
  
  		enroll->keytab_name = name;
-@@ -1297,6 +1297,7 @@ build_principal_salts (adcli_enroll *enr
+@@ -1274,13 +1274,13 @@ load_keytab_entry (krb5_context k5,
+ 
+ 	/* Skip over any entry without a principal or realm */
+ 	principal = entry->principal;
+-	if (!principal || !principal->realm.length)
++	if (!principal || !krb5_realm_length(principal->realm))
+ 		return TRUE;
+ 
+ 	/* Use the first keytab entry as realm */
+ 	realm = adcli_conn_get_domain_realm (enroll->conn);
+ 	if (!realm) {
+-		value = _adcli_str_dupn (principal->realm.data, principal->realm.length);
++		value = _adcli_str_dupn (krb5_realm_data(principal->realm), krb5_realm_length(principal->realm));
+ 		adcli_conn_set_domain_realm (enroll->conn, value);
+ 		_adcli_info ("Found realm in keytab: %s", value);
+ 		realm = adcli_conn_get_domain_realm (enroll->conn);
+@@ -1289,7 +1289,7 @@ load_keytab_entry (krb5_context k5,
+ 
+ 	/* Only look at entries that match the realm */
+ 	len = strlen (realm);
+-	if (principal->realm.length != len && strncmp (realm, principal->realm.data, len) != 0)
++	if (krb5_realm_length(principal->realm) != len && strncmp (realm, krb5_realm_data(principal->realm), len) != 0)
+ 		return TRUE;
+ 
+ 	code = krb5_unparse_name_flags (k5, principal, KRB5_PRINCIPAL_UNPARSE_NO_REALM, &name);
+@@ -1396,6 +1396,7 @@ build_principal_salts (adcli_enroll *enr
  {
  	krb5_error_code code;
  	krb5_data *salts;
@@ -105,7 +151,7 @@
  	const int count = 3;
  	int i = 0;
  
-@@ -1304,8 +1305,9 @@ build_principal_salts (adcli_enroll *enr
+@@ -1403,8 +1404,9 @@ build_principal_salts (adcli_enroll *enr
  	return_val_if_fail (salts != NULL, NULL);
  
  	/* Build up the salts, first a standard kerberos salt */
@@ -116,7 +162,7 @@
  
  	/* Then a Windows 2003 computer account salt */
  	code = _adcli_krb5_w2k3_salt (k5, principal, enroll->computer_name, &salts[i++]);
-@@ -1941,7 +1943,7 @@ adcli_enroll_set_keytab_name (adcli_enro
+@@ -2123,7 +2125,7 @@ adcli_enroll_set_keytab_name (adcli_enro
  		if (enroll->keytab_name_is_krb5) {
  			k5 = adcli_conn_get_krb5_context (enroll->conn);
  			return_if_fail (k5 != NULL);
