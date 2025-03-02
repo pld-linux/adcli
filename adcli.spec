@@ -31,7 +31,7 @@ Directory.
 
 %prep
 %setup -q
-%{!?with_krb5:%patch0 -p1}
+%{!?with_krb5:%patch -P0 -p1}
 
 %build
 %configure \
