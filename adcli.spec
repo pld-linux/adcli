@@ -6,12 +6,13 @@
 Summary:	Helper library and tools for Active Directory client operations
 Summary(pl.UTF-8):	Biblioteka pomocnicza i narzędzia do operacji klienckich usługi Active Directory
 Name:		adcli
-Version:	0.8.2
+Version:	0.9.2
 Release:	1
 License:	LGPL v2+
 Group:		Applications/System
-Source0:	https://www.freedesktop.org/software/realmd/releases/%{name}-%{version}.tar.gz
-# Source0-md5:	921848209eeb8ca7ec9685243806af26
+#Source0Download: https://gitlab.freedesktop.org/realmd/adcli/-/releases
+Source0:	https://gitlab.freedesktop.org/realmd/adcli/uploads/ea560656ac921b3fe0d455976aaae9be/%{name}-%{version}.tar.gz
+# Source0-md5:	7f6ae35ac2c16632812641c724b32e30
 Patch0:		%{name}-heimdal.patch
 URL:		https://www.freedesktop.org/software/realmd/adcli/
 BuildRequires:	cyrus-sasl-devel

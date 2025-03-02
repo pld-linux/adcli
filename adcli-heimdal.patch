@@ -76,8 +76,8 @@
  #include <ldap.h>
  
  typedef enum {
---- adcli-0.8.1/library/adenroll.c.orig	2015-12-11 11:37:01.000000000 +0100
-+++ adcli-0.8.1/library/adenroll.c	2016-01-25 17:48:42.724601210 +0100
+--- adcli-0.9.2/library/adenroll.c.orig	2022-09-28 13:23:05.000000000 +0200
++++ adcli-0.9.2/library/adenroll.c	2025-03-02 10:27:04.407010335 +0100
 @@ -28,7 +28,7 @@
  #include "seq.h"
  
@@ -87,7 +87,16 @@
  #include <ldap.h>
  #include <sasl/sasl.h>
  
-@@ -855,7 +855,7 @@ set_password_with_user_creds (adcli_enro
+@@ -774,7 +774,7 @@ calculate_enctypes (adcli_enroll *enroll
+ 	}
+ 
+ 	new_value = _adcli_krb5_format_enctypes (new_enctypes);
+-	krb5_free_enctypes (adcli_conn_get_krb5_context (enroll->conn), new_enctypes);
++	krb5_xfree (new_enctypes);
+ 	if (new_value == NULL) {
+ 		free (value);
+ 		_adcli_warn ("The encryption types desired are not available in active directory");
+@@ -1542,7 +1542,7 @@ set_password_with_user_creds (adcli_enro
  		            message ? ": " : "", message ? message : "");
  		res = ADCLI_ERR_CREDENTIALS;
  #ifdef HAVE_KRB5_CHPW_MESSAGE
@@ -96,7 +105,7 @@
  #else
  		free (message);
  #endif
-@@ -919,7 +919,7 @@ set_password_with_computer_creds (adcli_
+@@ -1614,7 +1614,7 @@ set_password_with_computer_creds (adcli_
  		            message ? ": " : "", message ? message : "");
  		res = ADCLI_ERR_CREDENTIALS;
  #ifdef HAVE_KRB5_CHPW_MESSAGE
@@ -105,7 +114,7 @@
  #else
  		free (message);
  #endif
-@@ -1245,10 +1245,10 @@ ensure_host_keytab (adcli_result res,
+@@ -2010,10 +2010,10 @@ ensure_host_keytab (adcli_result res,
  		return res;
  
  	if (!enroll->keytab_name) {
@@ -118,7 +127,7 @@
  		return_unexpected_if_fail (code == 0);
  
  		enroll->keytab_name = name;
-@@ -1274,13 +1274,13 @@ load_keytab_entry (krb5_context k5,
+@@ -2039,13 +2039,13 @@ load_keytab_entry (krb5_context k5,
  
  	/* Skip over any entry without a principal or realm */
  	principal = entry->principal;
@@ -134,7 +143,7 @@
  		adcli_conn_set_domain_realm (enroll->conn, value);
  		_adcli_info ("Found realm in keytab: %s", value);
  		realm = adcli_conn_get_domain_realm (enroll->conn);
-@@ -1289,7 +1289,7 @@ load_keytab_entry (krb5_context k5,
+@@ -2054,7 +2054,7 @@ load_keytab_entry (krb5_context k5,
  
  	/* Only look at entries that match the realm */
  	len = strlen (realm);
@@ -143,7 +152,7 @@
  		return TRUE;
  
  	code = krb5_unparse_name_flags (k5, principal, KRB5_PRINCIPAL_UNPARSE_NO_REALM, &name);
-@@ -1396,6 +1396,7 @@ build_principal_salts (adcli_enroll *enr
+@@ -2164,6 +2164,7 @@ build_principal_salts (adcli_enroll *enr
  {
  	krb5_error_code code;
  	krb5_data *salts;
@@ -151,7 +160,7 @@
  	const int count = 3;
  	int i = 0;
  
-@@ -1403,8 +1404,9 @@ build_principal_salts (adcli_enroll *enr
+@@ -2171,8 +2172,9 @@ build_principal_salts (adcli_enroll *enr
  	return_val_if_fail (salts != NULL, NULL);
  
  	/* Build up the salts, first a standard kerberos salt */
@@ -162,7 +171,37 @@
  
  	/* Then a Windows 2003 computer account salt */
  	code = _adcli_krb5_w2k3_salt (k5, principal, enroll->computer_name, &salts[i++]);
-@@ -2123,7 +2125,7 @@ adcli_enroll_set_keytab_name (adcli_enro
+@@ -2287,7 +2289,7 @@ add_principal_to_keytab (adcli_enroll *e
+ 
+ 		salts = build_principal_salts (enroll, k5, principal);
+ 		if (salts == NULL) {
+-			krb5_free_enctypes (k5, enctypes);
++			krb5_xfree (enctypes);
+ 			return ADCLI_ERR_UNEXPECTED;
+ 		}
+ 
+@@ -2309,7 +2311,7 @@ add_principal_to_keytab (adcli_enroll *e
+ 
+ 		free_principal_salts (k5, salts);
+ 	}
+-	krb5_free_enctypes (k5, enctypes);
++	krb5_xfree (enctypes);
+ 
+ 	if (code != 0) {
+ 		_adcli_err ("Couldn't add keytab entries: %s: %s",
+@@ -2660,7 +2662,11 @@ adcli_enroll_add_keytab_for_service_acco
+ 	adcli_result res;
+ 	krb5_context k5;
+ 	krb5_error_code code;
++#ifdef MAX_KEYTAB_NAME_LEN
+ 	char def_keytab_name[MAX_KEYTAB_NAME_LEN];
++#else
++	char def_keytab_name[1100];
++#endif
+ 	char *lc_dom_name;
+ 	int ret;
+ 
+@@ -3214,7 +3220,7 @@ adcli_enroll_set_keytab_name (adcli_enro
  		if (enroll->keytab_name_is_krb5) {
  			k5 = adcli_conn_get_krb5_context (enroll->conn);
  			return_if_fail (k5 != NULL);
@@ -171,8 +210,55 @@
  		} else {
  			free (enroll->keytab_name);
  		}
---- adcli-0.7.5/library/adkrb5.c.orig	2013-04-17 22:57:03.000000000 +0200
-+++ adcli-0.7.5/library/adkrb5.c	2014-12-23 19:50:58.044401806 +0100
+@@ -3300,7 +3306,7 @@ adcli_enroll_get_permitted_keytab_enctyp
+ 
+ 	new_enctypes = calloc (c + 1, sizeof (krb5_enctype));
+ 	if (new_enctypes == NULL) {
+-		krb5_free_enctypes (k5, permitted_enctypes);
++		krb5_xfree (permitted_enctypes);
+ 		return NULL;
+ 	}
+ 
+@@ -3317,7 +3323,7 @@ adcli_enroll_get_permitted_keytab_enctyp
+ 		}
+ 	}
+ 
+-	krb5_free_enctypes (k5, permitted_enctypes);
++	krb5_xfree (permitted_enctypes);
+ 
+ 	return new_enctypes;
+ }
+@@ -3723,11 +3729,15 @@ test_adcli_enroll_get_permitted_keytab_e
+ 		assert_num_eq (enctypes[c], permitted_enctypes[c]);
+ 	}
+ 	assert_num_eq (enctypes[c], 0);
+-	krb5_free_enctypes (k5, enctypes);
++	krb5_xfree (enctypes);
+ 
+ 	/* check that ENCTYPE_UNKNOWN is filtered out */
+ 	check_enctypes[0] = permitted_enctypes[0];
++#ifdef ENCTYPE_UNKNOWN
+ 	check_enctypes[1] = ENCTYPE_UNKNOWN;
++#else
++	check_enctypes[1] = 0x1ff;
++#endif
+ 	check_enctypes[2] = 0;
+ 	adcli_enroll_set_keytab_enctypes (enroll, check_enctypes);
+ 
+@@ -3735,9 +3745,9 @@ test_adcli_enroll_get_permitted_keytab_e
+ 	assert_ptr_not_null (enctypes);
+ 	assert_num_eq (enctypes[0], permitted_enctypes[0]);
+ 	assert_num_eq (enctypes[1], 0);
+-	krb5_free_enctypes (k5, enctypes);
++	krb5_xfree (enctypes);
+ 
+-	krb5_free_enctypes (k5, permitted_enctypes);
++	krb5_xfree (permitted_enctypes);
+ 
+ 	adcli_enroll_unref (enroll);
+ 	adcli_conn_unref (conn);
+--- adcli-0.9.2/library/adkrb5.c.orig	2022-04-29 07:30:33.000000000 +0200
++++ adcli-0.9.2/library/adkrb5.c	2025-03-02 10:11:23.548774068 +0100
 @@ -27,7 +27,7 @@
  #include "adprivate.h"
  
@@ -182,7 +268,7 @@
  
  #include <assert.h>
  #include <ctype.h>
-@@ -78,7 +78,7 @@ _adcli_krb5_keytab_clear (krb5_context k
+@@ -82,7 +82,7 @@ _adcli_krb5_keytab_clear (krb5_context k
  
  		/* See if we should remove this entry */
  		if (!match_func (k5, &entry, match_data)) {
@@ -191,7 +277,7 @@
  			continue;
  		}
  
-@@ -91,7 +91,7 @@ _adcli_krb5_keytab_clear (krb5_context k
+@@ -95,7 +95,7 @@ _adcli_krb5_keytab_clear (krb5_context k
  		return_val_if_fail (code == 0, code);
  
  		code = krb5_kt_remove_entry (k5, keytab, &entry);
@@ -200,7 +286,50 @@
  
  		if (code != 0)
  			return code;
-@@ -138,9 +138,10 @@ _adcli_krb5_keytab_add_entries (krb5_con
+@@ -225,7 +225,7 @@ match_enctype_and_kvno (krb5_context k5,
+ 
+ 	assert (closure->enctype);
+ 
+-	code = krb5_c_enctype_compare (k5, closure->enctype, entry->key.enctype,
++	code = krb5_c_enctype_compare (k5, closure->enctype, krb5_keyblock_get_enctype(&entry->keyblock),
+ 	                               &similar);
+ 
+ 	if (code == 0 && entry->vno == closure->kvno && similar) {
+@@ -262,12 +262,12 @@ _adcli_krb5_get_keyblock (krb5_context k
+ 
+ 		/* See if we should remove this entry */
+ 		if (!match_func (k5, &entry, match_data)) {
+-			krb5_free_keytab_entry_contents (k5, &entry);
++			krb5_kt_free_entry (k5, &entry);
+ 			continue;
+ 		}
+ 
+-		code = krb5_copy_keyblock_contents (k5, &entry.key, keyblock);
+-		krb5_free_keytab_entry_contents (k5, &entry);
++		code = krb5_copy_keyblock_contents (k5, &entry.keyblock, keyblock);
++		krb5_kt_free_entry (k5, &entry);
+ 		break;
+ 
+ 
+@@ -300,7 +300,7 @@ _adcli_krb5_keytab_copy_entries (krb5_co
+ 
+ 		memset (&entry, 0, sizeof (entry));
+ 
+-		code = _adcli_krb5_get_keyblock (k5, keytab, &entry.key,
++		code = _adcli_krb5_get_keyblock (k5, keytab, &entry.keyblock,
+ 		                                 match_enctype_and_kvno, &closure);
+ 		if (code != 0 || closure.matched == 0) {
+ 			return code != 0 ? code : ENOKEY;
+@@ -312,7 +312,7 @@ _adcli_krb5_keytab_copy_entries (krb5_co
+ 		code = krb5_kt_add_entry (k5, keytab, &entry);
+ 
+ 		entry.principal = NULL;
+-		krb5_free_keytab_entry_contents (k5, &entry);
++		krb5_kt_free_entry (k5, &entry);
+ 
+ 		if (code != 0)
+ 			return code;
+@@ -335,9 +335,10 @@ _adcli_krb5_keytab_add_entries (krb5_con
  	int i;
  
  	for (i = 0; enctypes[i] != 0; i++) {
@@ -212,7 +341,7 @@
  		if (code != 0)
  			return code;
  
-@@ -150,7 +151,7 @@ _adcli_krb5_keytab_add_entries (krb5_con
+@@ -347,7 +348,7 @@ _adcli_krb5_keytab_add_entries (krb5_con
  		code = krb5_kt_add_entry (k5, keytab, &entry);
  
  		entry.principal = NULL;
@@ -221,7 +350,7 @@
  
  		if (code != 0)
  			return code;
-@@ -225,11 +226,12 @@ _adcli_krb5_w2k3_salt (krb5_context k5,
+@@ -441,11 +442,12 @@ _adcli_krb5_w2k3_salt (krb5_context k5,
                         const char *host_netbios,
                         krb5_data *salt)
  {
@@ -235,7 +364,7 @@
  
  	/*
  	 * The format for the w2k3 computer account salt is:
-@@ -239,37 +241,37 @@ _adcli_krb5_w2k3_salt (krb5_context k5,
+@@ -455,37 +457,37 @@ _adcli_krb5_w2k3_salt (krb5_context k5,
  	realm = krb5_princ_realm (k5, principal);
  	host_length = strlen (host_netbios);
  
