@@ -2,17 +2,18 @@
 #
 # Conditional build:
 %bcond_with	krb5	# use MIT KRB5 instead of Heimdal Kerberos
+%bcond_with	selinux	# SELinux support (requires policy sources)
 #
 Summary:	Helper library and tools for Active Directory client operations
 Summary(pl.UTF-8):	Biblioteka pomocnicza i narzędzia do operacji klienckich usługi Active Directory
 Name:		adcli
-Version:	0.9.2
-Release:	2
+Version:	0.9.3.1
+Release:	1
 License:	LGPL v2+
 Group:		Applications/System
 #Source0Download: https://gitlab.freedesktop.org/realmd/adcli/-/releases
-Source0:	https://gitlab.freedesktop.org/realmd/adcli/uploads/ea560656ac921b3fe0d455976aaae9be/%{name}-%{version}.tar.gz
-# Source0-md5:	7f6ae35ac2c16632812641c724b32e30
+Source0:	https://gitlab.freedesktop.org/-/project/1196/uploads/5a1c55410c0965835b81fbd28d820d46/%{name}-%{version}.tar.gz
+# Source0-md5:	0826e7b6cac1df6dd1b6509507b384ed
 Patch0:		%{name}-heimdal.patch
 URL:		https://www.freedesktop.org/software/realmd/adcli/
 BuildRequires:	cyrus-sasl-devel
@@ -21,6 +22,11 @@ BuildRequires:	cyrus-sasl-devel
 BuildRequires:	libxslt-progs
 BuildRequires:	openldap-devel
 BuildRequires:	xmlto
+%if %{with selinux}
+BuildRequires:	libselinux-devel
+# policy sources (/usr/share/selinux/devel/Makefile)
+BuildRequires:	selinux-policy-???
+%endif
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
 %description
@@ -36,7 +42,9 @@ Directory.
 
 %build
 %configure \
+	%{!?with_selinux:--disable-selinux-support} \
 	--disable-silent-rules
+
 %{__make}
 
 %install
