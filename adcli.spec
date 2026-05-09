@@ -50,7 +50,8 @@ Directory.
 %install
 rm -rf $RPM_BUILD_ROOT
 
-%{__make} install \
+# race possible between doc/permissions.xml creation and doc/adcli.xml processing
+%{__make} -j1 install \
 	DESTDIR=$RPM_BUILD_ROOT
 
 %clean
